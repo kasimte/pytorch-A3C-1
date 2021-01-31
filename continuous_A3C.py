@@ -13,17 +13,41 @@ import torch.multiprocessing as mp
 from shared_adam import SharedAdam
 import gym
 import math, os
+import numpy as np
 os.environ["OMP_NUM_THREADS"] = "1"
 
 UPDATE_GLOBAL_ITER = 5
 GAMMA = 0.9
-MAX_EP = 3000
-MAX_EP_STEP = 200
+# MAX_EP = 3000
+MAX_EP = 20000
+MAX_EP_STEP = 10
 
 env = gym.make('Pendulum-v0')
-N_S = env.observation_space.shape[0]
-N_A = env.action_space.shape[0]
+# N_S = env.observation_space.shape[0]
+N_S = 1
+# N_A = env.action_space.shape[0]
+N_A = 1
 
+# Helper functions
+def _rescale(value):
+    """Rescales normalized value to be within range of env. dimension
+    """
+    range_min = 8
+    range_max = 500
+    return range_min + (range_max - range_min) * value
+
+def _calculate_reward(value):
+    """value is between 8 and 500"""
+    r = 0
+    if value <= 8.5 or value >= 499.5:
+        r -= 2000
+    elif 200 <= value <= 300:
+        r += 200
+    elif value<200:
+        r -= (200-value)
+    else:
+        r -= value
+    return r
 
 class Net(nn.Module):
     def __init__(self, s_dim, a_dim):
@@ -79,14 +103,23 @@ class Worker(mp.Process):
     def run(self):
         total_step = 1
         while self.g_ep.value < MAX_EP:
-            s = self.env.reset()
+            # s = self.env.reset()
+            s = np.zeros(1)
             buffer_s, buffer_a, buffer_r = [], [], []
             ep_r = 0.
             for t in range(MAX_EP_STEP):
-                if self.name == 'w0':
-                    self.env.render()
+                # if self.name == 'w0':
+                # self.env.render()
+                # import pdb; pdb.set_trace()
                 a = self.lnet.choose_action(v_wrap(s[None, :]))
-                s_, r, done, _ = self.env.step(a.clip(-2, 2))
+                print(a)
+                # a = self.lnet.choose_action(v_wra)
+                clipped_a = a.clip(0, 1)
+                print(clipped_a)
+                s_ = clipped_a
+                done = False
+                r = _calculate_reward(_rescale(s_))
+                # s_, r, done, _ = self.env.step(a.clip(0, 1))
                 if t == MAX_EP_STEP - 1:
                     done = True
                 ep_r += r
